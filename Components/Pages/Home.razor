@@ -1,0 +1,65 @@
+﻿@page "/"
+@using CreativeCenterCRM.Models
+@using CreativeCenterCRM.Services
+@inject ICenterService CenterService
+@rendermode InteractiveServer
+
+<PageTitle>Главная</PageTitle>
+
+<h1 class="fw-bold mb-4">Добро пожаловать в CreativeCenterCRM!</h1>
+
+<h2 class="mb-3">Общая статистика центра творчества</h2>
+
+<div class="row">
+    <div class="col-md-6 mb-3">
+        <div class="bg-white text-dark p-4 rounded border h-100">
+            <h5 class="mb-2">Всего занятий</h5>
+            <h2 class="display-4 fw-bold mb-0">@totalClubs</h2>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="bg-white text-dark p-4 rounded border h-100">
+            <h5 class="mb-2">Всего учеников</h5>
+            <h2 class="display-4 fw-bold mb-0">@totalMembers</h2>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4 shadow-sm">
+    <div class="card-body">
+        <h3 class="card-title mb-3">График работы центра</h3>
+        <div class="row">
+            <div class="col-md-6">
+                <p class="mb-2"><strong>Понедельник:</strong> 9:00 - 20:00</p>
+                <p class="mb-2"><strong>Вторник:</strong> 9:00 - 20:00</p>
+                <p class="mb-2"><strong>Среда:</strong> 9:00 - 20:00</p>
+                <p class="mb-2"><strong>Четверг:</strong> 9:00 - 20:00</p>
+                <p class="mb-2"><strong>Пятница:</strong> 9:00 - 18:00</p>
+            </div>
+            <div class="col-md-6">
+                <p class="mb-2"><strong>Суббота:</strong> 10:00 - 18:00</p>
+                <p class="mb-2"><strong>Воскресенье:</strong> выходной</p>
+                <p class="mb-0 mt-3 text-muted">Телефон: +7 (495) 885-52-46</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int totalClubs = 0;
+    private int totalMembers = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+    }
+
+    private async Task LoadStats()
+    {
+        var clubs = await CenterService.GetAllClubsAsync();
+        totalClubs = clubs.Count;
+
+        var members = await CenterService.GetAllMembersAsync();
+        totalMembers = members.Count;
+    }
+}

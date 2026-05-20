@@ -1,0 +1,200 @@
+﻿@page "/clubs"
+@using CreativeCenterCRM.Models
+@using CreativeCenterCRM.Services
+@inject ICenterService CenterService
+@rendermode InteractiveServer
+
+<PageTitle>Занятия</PageTitle>
+
+<div class="row mb-2 align-items-center">
+    <div class="col-md-6">
+        <h1 class="mb-0">Управление занятиями</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <span class="h4 fw-bold mb-0">Всего занятий: @clubs?.Count</span>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <button class="btn btn-primary" @onclick="ShowAddForm">➕ Добавить занятие</button>
+    </div>
+</div>
+
+@if (showForm)
+{
+    <div class="card p-3 mb-4 bg-light border-primary">
+        <h4>@(isEditing ? "Редактирование занятия" : "Новое занятие")</h4>
+        <EditForm Model="@selectedClub" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Название занятия:</label>
+                    <InputText @bind-Value="selectedClub.Name" class="form-control" placeholder="Например: Гитара" />
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Преподаватель:</label>
+                    <InputText @bind-Value="selectedClub.TeacherName" class="form-control" placeholder="ФИО" />
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Описание:</label>
+                    <InputText @bind-Value="selectedClub.Description" class="form-control" placeholder="Краткое описание" />
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-success me-2">Сохранить</button>
+            <button type="button" class="btn btn-secondary" @onclick="CancelForm">Отмена</button>
+        </EditForm>
+    </div>
+}
+
+<div class="card p-3 mb-4 bg-light">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+            <label class="form-label fw-bold">Поиск по педагогу:</label>
+            <InputText @bind-Value="filterTeacher" class="form-control" placeholder="Введите ФИО преподавателя" @oninput="ApplyFilters" />
+        </div>
+
+        <div class="col-md-6">
+            <button class="btn btn-outline-secondary w-100" @onclick="ResetFilters">Сбросить</button>
+        </div>
+    </div>
+</div>
+
+@if (clubs == null)
+{
+    <p>Загрузка...</p>
+}
+else if (!filteredClubs.Any())
+{
+    <div class="alert alert-info">Занятий не найдено.</div>
+}
+else
+{
+    <table class="table table-hover">
+        <thead class="table-light">
+            <tr>
+                <th style="width: 25%;">Название</th>
+                <th style="width: 25%;">Преподаватель</th>
+                <th>Описание</th>
+                <th style="width: 150px;">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var club in filteredClubs)
+            {
+                <tr>
+                    <td><strong>@club.Name</strong></td>
+                    <td>@club.TeacherName</td>
+                    <td>@club.Description</td>
+                    <td>
+                        <button class="btn btn-link text-primary p-0 me-3" @onclick="() => EditClub(club)">
+                            Изменить
+                        </button>
+                        <button class="btn btn-link text-danger p-0" @onclick="() => DeleteClub(club.Id)">
+                            Удалить
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Club>? clubs;
+    private bool showForm = false;
+    private bool isEditing = false;
+    private Club selectedClub = new Club();
+
+    private string filterTeacher = "";
+
+    private List<Club> filteredClubs => GetFilteredClubs();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        clubs = await CenterService.GetAllClubsAsync();
+    }
+
+    private List<Club> GetFilteredClubs()
+    {
+        if (clubs == null) return new List<Club>();
+
+        var result = clubs.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(filterTeacher))
+        {
+            var lowerFilter = filterTeacher.ToLower();
+            result = result.Where(c =>
+                c.TeacherName != null && c.TeacherName.ToLower().Contains(lowerFilter));
+        }
+
+        return result.ToList();
+    }
+
+    private void ApplyFilters()
+    {
+        StateHasChanged();
+    }
+
+    private void ResetFilters()
+    {
+        filterTeacher = "";
+        StateHasChanged();
+    }
+
+    private void ShowAddForm()
+    {
+        selectedClub = new Club();
+        isEditing = false;
+        showForm = true;
+    }
+
+    private void EditClub(Club club)
+    {
+        selectedClub = new Club
+        {
+            Id = club.Id,
+            Name = club.Name,
+            TeacherName = club.TeacherName,
+            Description = club.Description
+        };
+        isEditing = true;
+        showForm = true;
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        isEditing = false;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (isEditing)
+        {
+            await CenterService.UpdateClubAsync(selectedClub);
+        }
+        else
+        {
+            await CenterService.AddClubAsync(selectedClub);
+        }
+
+        showForm = false;
+        isEditing = false;
+        await LoadData();
+    }
+
+    private async Task DeleteClub(int id)
+    {
+        await CenterService.DeleteClubAsync(id);
+        await LoadData();
+    }
+}

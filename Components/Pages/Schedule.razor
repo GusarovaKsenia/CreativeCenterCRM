@@ -1,0 +1,305 @@
+﻿@page "/schedule"
+@using CreativeCenterCRM.Models
+@using CreativeCenterCRM.Services
+@inject ICenterService CenterService
+@rendermode InteractiveServer
+
+<PageTitle>Расписание</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Расписание занятий</h1>
+    <button class="btn btn-primary" @onclick="ShowAddForm">➕ Добавить занятие</button>
+</div>
+
+@if (showAddForm)
+{
+    <div class="card p-3 mb-4 bg-light border-success">
+        <h4>Новое занятие в расписании</h4>
+        <EditForm Model="@newSchedule" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label">День недели:</label>
+                    <InputSelect @bind-Value="newSchedule.DayOfWeek" class="form-select">
+                        <option value="">Выберите день</option>
+                        @foreach (var day in daysOfWeek)
+                        {
+                            <option value="@day">@day</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Занятие:</label>
+                    <InputSelect @bind-Value="newSchedule.ClubId" class="form-select">
+                        <option value="0">Выберите занятие</option>
+                        @foreach (var club in clubs)
+                        {
+                            <option value="@club.Id">@club.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Начало:</label>
+                    <InputText @bind-Value="startTimeText" class="form-control" placeholder="14:00" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Конец:</label>
+                    <InputText @bind-Value="endTimeText" class="form-control" placeholder="15:30" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Кабинет:</label>
+                    <InputText @bind-Value="newSchedule.Room" class="form-control" placeholder="101" />
+                </div>
+            </div>
+            <div class="mt-2">
+                <button type="submit" class="btn btn-success me-2">Сохранить</button>
+                <button type="button" class="btn btn-secondary" @onclick="CancelAdd">Отмена</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@if (showEnrollForm)
+{
+    <div class="card p-3 mb-4 bg-light border-primary">
+        <h4>Запись на занятие: <strong>@selectedSchedule?.Club?.Name</strong></h4>
+        <p class="text-muted mb-3">
+            @selectedSchedule?.DayOfWeek, @selectedSchedule?.StartTime.ToString(@"hh\:mm") - @selectedSchedule?.EndTime.ToString(@"hh\:mm"), Каб. @selectedSchedule?.Room
+        </p>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Выберите ученика:</label>
+            <select @bind="enrollmentMemberId" class="form-select">
+                <option value="0">Выберите ученика</option>
+                @if (members != null)
+                {
+                    @foreach (var member in members)
+                    {
+                        <option value="@member.Id">@member.FirstName @member.LastName</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-success btn-sm" @onclick="HandleEnrollSubmit">Записать</button>
+            <button class="btn btn-secondary btn-sm" @onclick="CancelEnroll">Отмена</button>
+        </div>
+    </div>
+}
+
+<div class="card p-3 mb-4 bg-light">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label fw-bold">Поиск по названию:</label>
+            <InputText @bind-Value="filterName" class="form-control" placeholder="Например: Рисование" @oninput="ApplyFilters" />
+        </div>
+        <div class="col-md-5">
+            <label class="form-label fw-bold">Поиск по педагогу:</label>
+            <InputText @bind-Value="filterTeacher" class="form-control" placeholder="Например: Иванова" @oninput="ApplyFilters" />
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" @onclick="ResetFilters">Сброс</button>
+        </div>
+    </div>
+</div>
+
+@if (filteredSchedules == null)
+{
+    <p>Загрузка...</p>
+}
+else if (!filteredSchedules.Any())
+{
+    <div class="alert alert-info">По выбранным фильтрам занятий не найдено.</div>
+}
+else
+{
+    @foreach (var day in daysOfWeek)
+    {
+        var dayItems = filteredSchedules.Where(s => s.DayOfWeek == day).ToList();
+        if (dayItems.Any())
+        {
+            <h4 class="mt-4 mb-3 text-primary border-bottom pb-2">@day</h4>
+            @foreach (var item in dayItems)
+            {
+                var enrolledMembers = GetEnrolledMembers(item.Id);
+
+                <div class="card mb-3 shadow-sm border-0 bg-light">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                            <div style="min-width: 120px;">
+                                <span class="d-block fw-bold fs-5 text-dark">@item.StartTime.ToString(@"hh\:mm") - @item.EndTime.ToString(@"hh\:mm")</span>
+                            </div>
+
+                            <div class="flex-grow-1">
+                                <p class="mb-0">
+                                    <strong>@item.Club?.Name</strong>
+                                    <span class="text-muted">| @item.Club?.TeacherName</span>
+                                    <span class="text-muted">| @item.Room</span>
+                                </p>
+                            </div>
+
+                            <div>
+                                <button class="btn btn-success btn-sm me-2" @onclick="() => ShowEnrollForm(item)">
+                                    Записать ученика
+                                </button>
+                            </div>
+
+                            <div>
+                                <button class="btn btn-link text-danger p-0" @onclick="() => DeleteSchedule(item.Id)">
+                                    Удалить
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (enrolledMembers.Any())
+                        {
+                            <div class="mt-3 pt-2 border-top">
+                                <h6 class="mb-2 text-muted">Записанные ученики (@enrolledMembers.Count):</h6>
+                                <div class="d-flex flex-wrap gap-3">
+                                    @foreach (var member in enrolledMembers)
+                                    {
+                                        <span class="text-dark">@member.FirstName @member.LastName</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mt-3 pt-2 border-top">
+                                <p class="text-muted mb-0">Записанные ученики: пока никого</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    }
+}
+
+@code {
+    private List<ScheduleItem>? allSchedules;
+    private List<Club>? clubs;
+    private List<Member>? members;
+    private List<ScheduleMember>? allScheduleMembers;
+
+    private bool showAddForm = false;
+    private bool showEnrollForm = false;
+
+    private ScheduleItem newSchedule = new ScheduleItem();
+    private ScheduleItem? selectedSchedule = null;
+    private string startTimeText = "";
+    private string endTimeText = "";
+
+    private int enrollmentMemberId = 0;
+
+    private string filterName = "";
+    private string filterTeacher = "";
+
+    private List<ScheduleItem>? filteredSchedules => GetFilteredSchedules();
+    private readonly string[] daysOfWeek = { "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота" };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        allSchedules = await CenterService.GetScheduleAsync();
+        clubs = await CenterService.GetAllClubsAsync();
+        members = await CenterService.GetAllMembersAsync();
+
+        allScheduleMembers = new List<ScheduleMember>();
+        if (allSchedules != null)
+        {
+            foreach (var schedule in allSchedules)
+            {
+                var membersList = await CenterService.GetScheduleMembersAsync(schedule.Id);
+                allScheduleMembers.AddRange(membersList);
+            }
+        }
+    }
+
+    private List<ScheduleItem>? GetFilteredSchedules()
+    {
+        if (allSchedules == null) return null;
+        var result = allSchedules.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(filterName))
+            result = result.Where(s => s.Club?.Name.Contains(filterName, StringComparison.OrdinalIgnoreCase) == true);
+        if (!string.IsNullOrWhiteSpace(filterTeacher))
+            result = result.Where(s => s.Club?.TeacherName.Contains(filterTeacher, StringComparison.OrdinalIgnoreCase) == true);
+        return result.ToList();
+    }
+
+    private void ApplyFilters() => StateHasChanged();
+    private void ResetFilters() { filterName = ""; filterTeacher = ""; StateHasChanged(); }
+
+    private List<Member> GetEnrolledMembers(int scheduleId)
+    {
+        if (members == null || allScheduleMembers == null) return new List<Member>();
+
+        var memberIds = allScheduleMembers
+            .Where(sm => sm.ScheduleId == scheduleId)
+            .Select(sm => sm.MemberId)
+            .ToList();
+
+        return members.Where(m => memberIds.Contains(m.Id)).ToList();
+    }
+
+    private void ShowAddForm() { newSchedule = new ScheduleItem(); startTimeText = ""; endTimeText = ""; showAddForm = true; }
+    private void CancelAdd() => showAddForm = false;
+
+    private async Task HandleValidSubmit()
+    {
+        if (TimeSpan.TryParse(startTimeText, out var start) && TimeSpan.TryParse(endTimeText, out var end))
+        {
+            newSchedule.StartTime = start;
+            newSchedule.EndTime = end;
+            if (newSchedule.ClubId == 0) return;
+            await CenterService.AddScheduleAsync(newSchedule);
+            showAddForm = false;
+            await LoadData();
+        }
+    }
+
+    private void ShowEnrollForm(ScheduleItem schedule)
+    {
+        selectedSchedule = schedule;
+        enrollmentMemberId = 0;
+        showEnrollForm = true;
+    }
+
+    private void CancelEnroll()
+    {
+        showEnrollForm = false;
+        selectedSchedule = null;
+        enrollmentMemberId = 0;
+    }
+
+    private async Task HandleEnrollSubmit()
+    {
+        if (enrollmentMemberId == 0 || selectedSchedule == null) return;
+
+        var scheduleMember = new ScheduleMember
+        {
+            ScheduleId = selectedSchedule.Id,
+            MemberId = enrollmentMemberId,
+            EnrolledAt = DateTime.Now
+        };
+
+        await CenterService.AddScheduleMemberAsync(scheduleMember);
+
+        selectedSchedule.CurrentSeats++;
+        await CenterService.UpdateScheduleAsync(selectedSchedule);
+
+        showEnrollForm = false;
+        selectedSchedule = null;
+        enrollmentMemberId = 0;
+        await LoadData();
+    }
+
+    private async Task DeleteSchedule(int id)
+    {
+        await CenterService.DeleteScheduleAsync(id);
+        await LoadData();
+    }
+}

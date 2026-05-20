@@ -1,0 +1,271 @@
+﻿@page "/payments"
+@using CreativeCenterCRM.Models
+@using CreativeCenterCRM.Services
+@inject ICenterService CenterService
+@rendermode InteractiveServer
+
+<PageTitle>Оплаты</PageTitle>
+
+<div class="row mb-2 align-items-center">
+    <div class="col-md-6">
+        <h1 class="mb-0">Учет оплат</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <h4 class="fw-bold mb-0">Общая сумма: @totalAmount.ToString("C")</h4>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <button class="btn btn-primary" @onclick="ShowAddForm">
+            ➕ Добавить оплату
+        </button>
+    </div>
+</div>
+
+@if (showAddForm)
+{
+    <div class="card p-3 mb-4 bg-light border-success">
+        <h4>Новая оплата</h4>
+        <EditForm Model="@newPayment" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Участник:</label>
+                    <InputSelect @bind-Value="newPayment.MemberId" class="form-select">
+                        <option value="0">Выберите участника</option>
+                        @foreach (var member in members)
+                        {
+                            <option value="@member.Id">@member.FirstName @member.LastName</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">За какое занятие:</label>
+                    <InputSelect @bind-Value="newPayment.ClubId" class="form-select">
+                        <option value="0">Общая оплата</option>
+                        @foreach (var club in clubs)
+                        {
+                            <option value="@club.Id">@club.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Способ оплаты:</label>
+                    <InputSelect @bind-Value="newPayment.PaymentMethod" class="form-select">
+                        <option value="">Выберите способ</option>
+                        <option value="Наличные">Наличные</option>
+                        <option value="Карта">Карта</option>
+                    </InputSelect>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Сумма:</label>
+                    <input type="text"
+                           @bind="amountText"
+                           @bind:event="oninput"
+                           class="form-control"
+                           placeholder="Введите сумму" />
+                    @if (!string.IsNullOrEmpty(amountError))
+                    {
+                        <div class="text-danger small">@amountError</div>
+                    }
+                </div>
+
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Дата:</label>
+                    <InputDate @bind-Value="newPayment.Date" class="form-control" />
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Комментарий:</label>
+                <InputText @bind-Value="newPayment.Description" class="form-control" placeholder="Введите комметарий" />
+            </div>
+
+            <button type="submit" class="btn btn-success me-2">Сохранить</button>
+            <button type="button" class="btn btn-secondary" @onclick="CancelAdd">Отмена</button>
+        </EditForm>
+    </div>
+}
+
+<div class="card p-3 mb-4 bg-light">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label fw-bold">Ученик:</label>
+            <InputSelect @bind-Value="filterMemberId" class="form-select" @onchange="ApplyFilters">
+                <option value="0">Все ученики</option>
+                @foreach (var member in members)
+                {
+                    <option value="@member.Id">@member.FirstName @member.LastName</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label fw-bold">Занятие:</label>
+            <InputSelect @bind-Value="filterClubId" class="form-select" @onchange="ApplyFilters">
+                <option value="0">Все занятия</option>
+                @foreach (var club in clubs)
+                {
+                    <option value="@club.Id">@club.Name</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label fw-bold">Начало периода:</label>
+            <InputDate @bind-Value="filterDateFrom" class="form-control" @onchange="ApplyFilters" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label fw-bold">Конец периода:</label>
+            <InputDate @bind-Value="filterDateTo" class="form-control" @onchange="ApplyFilters" />
+        </div>
+
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" @onclick="ResetFilters">Сброс</button>
+        </div>
+    </div>
+</div>
+
+@if (payments == null)
+{
+    <p>Загрузка...</p>
+}
+else if (!filteredPayments.Any())
+{
+    <div class="alert alert-info">Нет оплат по выбранным фильтрам.</div>
+}
+else
+{
+    <table class="table table-striped table-hover">
+        <thead class="table-info">
+            <tr>
+                <th>Дата</th>
+                <th>Участник</th>
+                <th>Занятие</th>
+                <th>Способ</th>
+                <th>Сумма</th>
+                <th>Комментарий</th>
+
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var payment in filteredPayments)
+            {
+                <tr>
+                    <td>@payment.Date.ToShortDateString()</td>
+                    <td>@payment.Member?.FirstName @payment.Member?.LastName</td>
+                    <td>@(payment.Club?.Name ?? "Общее")</td>
+                    <td>@payment.PaymentMethod</td>
+                    <td class="fw-bold">@payment.Amount.ToString("C")</td>
+                    <td>@payment.Description</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Payment>? payments;
+    private List<Member>? members;
+    private List<Club>? clubs;
+
+    private bool showAddForm = false;
+    private Payment newPayment = new Payment();
+
+    private string amountText = "";
+    private string amountError = "";
+
+    private int filterMemberId = 0;
+    private int filterClubId = 0;
+    private DateTime? filterDateFrom = null;
+    private DateTime? filterDateTo = null;
+
+    private List<Payment> filteredPayments => GetFilteredPayments();
+    private decimal totalAmount => filteredPayments.Sum(p => p.Amount);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        payments = await CenterService.GetPaymentsAsync();
+        members = await CenterService.GetAllMembersAsync();
+        clubs = await CenterService.GetAllClubsAsync();
+    }
+
+    private List<Payment> GetFilteredPayments()
+    {
+        if (payments == null) return new List<Payment>();
+
+        var result = payments.AsEnumerable();
+
+        if (filterMemberId > 0)
+            result = result.Where(p => p.MemberId == filterMemberId);
+
+        if (filterClubId > 0)
+            result = result.Where(p => p.ClubId == filterClubId);
+
+        if (filterDateFrom.HasValue)
+            result = result.Where(p => p.Date.Date >= filterDateFrom.Value.Date);
+
+        if (filterDateTo.HasValue)
+            result = result.Where(p => p.Date.Date <= filterDateTo.Value.Date);
+
+        return result.ToList();
+    }
+
+    private void ApplyFilters() => StateHasChanged();
+
+    private void ResetFilters()
+    {
+        filterMemberId = 0;
+        filterClubId = 0;
+        filterDateFrom = null;
+        filterDateTo = null;
+        StateHasChanged();
+    }
+
+    private void ShowAddForm()
+    {
+        newPayment = new Payment { Date = DateTime.Now, PaymentMethod = "Наличные" };
+        amountText = "";
+        amountError = "";
+        showAddForm = true;
+    }
+
+    private void CancelAdd() => showAddForm = false;
+
+    private async Task HandleValidSubmit()
+    {
+        amountError = "";
+
+        if (!decimal.TryParse(amountText.Replace(",", "."), out var parsedAmount) || parsedAmount <= 0)
+        {
+            amountError = "Введите корректную положительную сумму.";
+            return;
+        }
+
+        newPayment.Amount = parsedAmount;
+
+        if (newPayment.MemberId == 0)
+        {
+            amountError = "Выберите участника.";
+            return;
+        }
+
+        await CenterService.AddPaymentAsync(newPayment);
+        showAddForm = false;
+        amountText = "";
+        await LoadData();
+    }
+}

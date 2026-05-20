@@ -1,0 +1,14 @@
+version: '3.4'
+
+services:
+  creative-center-crm:
+    image: kgurasova/creative-center-crm:latest 
+    build: .
+    container_name: crm-app
+    ports:
+      - "8013:8080" 
+    volumes:
+      - ./crm.db:/app/crm.db 
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    restart: unless-stopped

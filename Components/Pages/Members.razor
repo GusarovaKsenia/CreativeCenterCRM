@@ -1,0 +1,247 @@
+﻿@page "/members"
+@using CreativeCenterCRM.Models
+@using CreativeCenterCRM.Services
+@inject ICenterService CenterService
+@rendermode InteractiveServer
+
+<PageTitle>Ученики</PageTitle>
+
+<h1>Общая информация об учениках</h1>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <button class="btn btn-primary" @onclick="ShowAddForm">
+            ➕ Добавить ученика
+        </button>
+    </div>
+
+    <div class="col-md-6 text-end">
+        <h4 class="fw-bold mb-0">Всего учеников: @members?.Count</h4>
+    </div>
+</div>
+
+@if (showForm)
+{
+    <div class="card p-3 mb-4 bg-light border-primary">
+        <h4>@(isEditing ? "Редактирование ученика" : "Новый ученик")</h4>
+        <EditForm Model="@selectedMember" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Имя:</label>
+                    <InputText @bind-Value="selectedMember.FirstName" class="form-control" placeholder="Введите Имя" />
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Фамилия:</label>
+                    <InputText @bind-Value="selectedMember.LastName" class="form-control" placeholder="Введите Фамилию" />
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Возраст:</label>
+                    <InputNumber @bind-Value="selectedMember.Age" class="form-control" placeholder="Введите возраст" />
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Телефон:</label>
+                    <InputText @bind-Value="selectedMember.Phone" class="form-control" placeholder="Введите номер телефона" />
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Занятие:</label>
+                    <InputSelect @bind-Value="selectedMember.ClubId" class="form-select">
+                        <option value="0">Выберите занятие</option>
+                        @foreach (var club in clubs)
+                        {
+                            <option value="@club.Id">@club.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label">Комментарий:</label>
+                    <InputText @bind-Value="newComment" class="form-control" placeholder="Интересы ученика" />
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-success me-2">Сохранить</button>
+            <button type="button" class="btn btn-secondary" @onclick="CancelForm">Отмена</button>
+        </EditForm>
+    </div>
+}
+
+<div class="card p-3 mb-4 bg-light">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label fw-bold">Поиск по имени:</label>
+            <InputText @bind-Value="filterName" class="form-control" placeholder="Введите имя или фамилию" @oninput="ApplyFilters" />
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label fw-bold">Поиск по телефону:</label>
+            <InputText @bind-Value="filterPhone" class="form-control" placeholder="Введите номер телефона" @oninput="ApplyFilters" />
+        </div>
+
+        <div class="col-md-4">
+            <button class="btn btn-outline-secondary w-100" @onclick="ResetFilters">Сбросить</button>
+        </div>
+    </div>
+</div>
+
+@if (members == null)
+{
+    <p>Загрузка...</p>
+}
+else if (!filteredMembers.Any())
+{
+    <div class="alert alert-info">Учеников не найдено.</div>
+}
+else
+{
+    <table class="table table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>ФИО</th>
+                <th>Возраст</th>
+                <th>Телефон</th>
+                <th>Комментарий</th>
+                <th style="width: 150px;">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var member in filteredMembers)
+            {
+                <tr>
+                    <td><strong>@member.FirstName @member.LastName</strong></td>
+                    <td>@member.Age</td>
+                    <td>@member.Phone</td>
+                    <td>@(member.Comment ?? "-")</td>
+                    <td>
+                        <button class="btn btn-link text-primary p-0 me-3" @onclick="() => EditMember(member)">
+                            Изменить
+                        </button>
+                        <button class="btn btn-link text-danger p-0" @onclick="() => DeleteMember(member.Id)">
+                            Удалить
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Member>? members;
+    private List<Club>? clubs;
+
+    private bool showForm = false;
+    private bool isEditing = false;
+    private Member selectedMember = new Member();
+    private string newComment = string.Empty;
+
+    private string filterName = "";
+    private string filterPhone = ""; 
+
+    private List<Member> filteredMembers => GetFilteredMembers();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        members = await CenterService.GetAllMembersAsync();
+        clubs = await CenterService.GetAllClubsAsync();
+    }
+
+    private List<Member> GetFilteredMembers()
+    {
+        if (members == null) return new List<Member>();
+
+        var result = members.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(filterName))
+        {
+            var lowerFilter = filterName.ToLower();
+            result = result.Where(m =>
+                m.FirstName.ToLower().Contains(lowerFilter) ||
+                m.LastName.ToLower().Contains(lowerFilter));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filterPhone))
+        {
+            result = result.Where(m =>
+                m.Phone != null && m.Phone.Contains(filterPhone));
+        }
+
+        return result.ToList();
+    }
+
+    private void ApplyFilters()
+    {
+        StateHasChanged();
+    }
+
+    private void ResetFilters()
+    {
+        filterName = "";
+        filterPhone = ""; 
+        StateHasChanged();
+    }
+
+    private void ShowAddForm()
+    {
+        selectedMember = new Member();
+        newComment = string.Empty;
+        isEditing = false;
+        showForm = true;
+    }
+
+    private void EditMember(Member member)
+    {
+        selectedMember = new Member
+        {
+            Id = member.Id,
+            FirstName = member.FirstName,
+            LastName = member.LastName,
+            Age = member.Age,
+            Phone = member.Phone,
+            ClubId = member.ClubId,
+            Comment = member.Comment
+        };
+        newComment = member.Comment ?? string.Empty;
+        isEditing = true;
+        showForm = true;
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        isEditing = false;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        selectedMember.Comment = newComment;
+
+        if (isEditing)
+        {
+            await CenterService.UpdateMemberAsync(selectedMember);
+        }
+        else
+        {
+            await CenterService.AddMemberAsync(selectedMember);
+        }
+
+        showForm = false;
+        isEditing = false;
+        await LoadData();
+    }
+
+    private async Task DeleteMember(int id)
+    {
+        await CenterService.DeleteMemberAsync(id);
+        await LoadData();
+    }
+}
